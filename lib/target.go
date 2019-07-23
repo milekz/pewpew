@@ -7,12 +7,14 @@ import (
 
 //Reasonable default values for a target
 const (
-	DefaultURL         = "http://localhost"
-	DefaultTimeout     = "10s"
-	DefaultMethod      = "GET"
-	DefaultUserAgent   = "pewpew"
-	DefaultCount       = 10
-	DefaultConcurrency = 1
+	DefaultURL           = "http://localhost"
+	DefaultTimeout       = "10s"
+	DefaultMethod        = "GET"
+	DefaultUserAgent     = "pewpew"
+	DefaultCount         = 10
+	DefaultConcurrency   = 1
+	DefaultGlobalTimeout = 3600
+
 )
 
 type (
