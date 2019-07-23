@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 //TODO move to other file
@@ -16,6 +17,8 @@ type (
 		Verbose bool
 		Quiet   bool
 
+		//Global Timeout
+		GlobalTimeout int
 		//Count is how many total requests to make for each Target
 		Count int
 		//Concurrency is how many requests can be happening simultaneously for each Target
@@ -45,8 +48,9 @@ type (
 //with package defaults
 func NewStressConfig() (s *StressConfig) {
 	s = &StressConfig{
-		Count:       DefaultCount,
-		Concurrency: DefaultConcurrency,
+		Count:         DefaultCount,
+		Concurrency:   DefaultConcurrency,
+		GlobalTimeout: DefaultGlobalTimeout,
 		Targets: []Target{
 			{
 				URL:             DefaultURL,
@@ -72,6 +76,7 @@ func RunStress(s StressConfig, w io.Writer) ([][]RequestStat, error) {
 	}
 	targetCount := len(s.Targets)
 
+	Rununtil := time.Now().Unix() + int64(s.GlobalTimeout)
 	//setup printer
 	p := printer{output: w}
 
@@ -105,17 +110,30 @@ func RunStress(s StressConfig, w io.Writer) ([][]RequestStat, error) {
 			//start up the workers
 			for i := 0; i < s.Concurrency; i++ {
 				go func() {
-					for req := range requestQueue {
-						response, stat := runRequest(req, client)
-						if !s.Quiet {
-							p.printStat(stat)
-							if s.Verbose {
-								p.printVerbose(&req, response)
+					for {
+						select {
+						case req, ok := <-requestQueue:
+							if !ok {
+								//queue is empty
+								workerDoneChan <- workerDone{}
+								return
 							}
+							response, stat := runRequest(req, client)
+							if Rununtil <= time.Now().Unix() {
+								//We reach GlobalTimeout
+								workerDoneChan <- workerDone{}
+								return
+							}
+							if !s.Quiet {
+								p.printStat(stat)
+								if s.Verbose {
+									p.printVerbose(&req, response)
+								}
+							}
+
+							requestStatChan <- stat
 						}
-						requestStatChan <- stat
 					}
-					workerDoneChan <- workerDone{}
 				}()
 			}
 			requestStats := make([]RequestStat, s.Count)
@@ -140,9 +158,12 @@ func RunStress(s StressConfig, w io.Writer) ([][]RequestStat, error) {
 	}
 	targetRequestStats := make([][]RequestStat, targetCount)
 	targetDoneCount := 0
-	for reqStats := range targetStats {
-		targetRequestStats[targetDoneCount] = reqStats
-		targetDoneCount++
+	for {
+		select {
+		case reqStats := <-targetStats:
+			targetRequestStats[targetDoneCount] = reqStats
+			targetDoneCount++
+		}
 		if targetDoneCount == targetCount {
 			//all targets are finished
 			break
