@@ -57,6 +57,9 @@ func CreateRequestsStats(requestStats []RequestStat) RequestStatSummary {
 		if requestStats[i].Error != nil {
 			continue
 		}
+		if requestStats[i].URL == "" {
+			continue
+		}
 		nonErrCount++
 		if requestStats[i].Duration > summary.maxDuration {
 			summary.maxDuration = requestStats[i].Duration
